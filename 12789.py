@@ -1,19 +1,25 @@
 n = int(input())
 row = list(map(int, input().split()))[::-1]
-space = [0]
+space = []
+res=0
 for i in range(1,n+1):
     while(1):
-        last = row.pop()
-        if last == i:
+        if not row and space:
+            if space[-1] != i:
+                res = "Sad"
+                break
+            else:
+                space.pop()
+                break
+        if row[-1] == i:
+            row.pop()
             break
-        elif space[-1] == i:
+        if space and space[-1] == i:
             space.pop()
             break
         else:
-            space.append(last)
-            if len(space) == n:
-                print("Sad")
-                break
-            break
-
-print("Nice")
+            space.append(row.pop())
+if res:
+    print(res)
+else:
+    print("Nice")
