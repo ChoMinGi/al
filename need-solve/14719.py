@@ -14,7 +14,6 @@ for i in range(1,len(water)-1):
             diff = height-water[h]
             if diff>0:
                 res+=diff
-                print(diff, left,i,h)
         left = i
 
 if len(water)<=2:
