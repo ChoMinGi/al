@@ -1,0 +1,372 @@
+import time
+import random
+from heapq import heappush, heappop
+from multiprocessing import Pool
+import math
+
+
+class FibonacciHeap:
+
+    # internal node class
+    class Node:
+        def __init__(self, key, value):
+            self.key = key
+            self.value = value
+            self.parent = self.child = self.left = self.right = None
+            self.degree = 0
+            self.mark = False
+
+    # function to iterate through a doubly linked list
+    def iterate(self, head):
+        node = stop = head
+        flag = False
+        while True:
+            if node == stop and flag is True:
+                break
+            elif node == stop:
+                flag = True
+            yield node
+            node = node.right
+
+    # pointer to the head and minimum node in the root list
+    root_list, min_node = None, None
+
+    # maintain total node count in full fibonacci heap
+    total_nodes = 0
+
+    # return min node in O(1) time
+    def find_min(self):
+        return self.min_node
+
+    # extract (delete) the min node from the heap in O(log n) time
+    # amortized cost analysis can be found here (http://bit.ly/1ow1Clm)
+    def extract_min(self):
+        z = self.min_node
+        if z is not None:
+            if z.child is not None:
+                children = [x for x in self.iterate(z.child)]
+                for child in children:
+                    self.merge_with_root_list(child)
+                    child.parent = None
+            self.remove_from_root_list(z)
+            if z == z.right:
+                self.root_list = self.min_node = None
+            else:
+                self.min_node = z.right
+                self.consolidate()
+            self.total_nodes -= 1
+            return z
+        return None 
+
+    # insert new node into the unordered root list in O(1) time
+    # returns the node so that it can be used for decrease_key later
+    def insert(self, key, value=None):
+        n = self.Node(key, value)
+        n.left = n.right = n
+        self.merge_with_root_list(n)
+        if self.min_node is None or n.key < self.min_node.key:
+            self.min_node = n
+        self.total_nodes += 1
+        return n
+
+    # modify the key of some node in the heap in O(1) time
+    def decrease_key(self, x, k):
+        if k > x.key:
+            return None
+        x.key = k
+        y = x.parent
+        if y is not None and x.key < y.key:
+            self.cut(x, y)
+            self.cascading_cut(y)
+        # 최소 노드가 None이 아닐 때만 최소 키와 비교하도록 수정
+        if self.min_node and x.key < self.min_node.key:
+            self.min_node = x
+
+
+    # merge two fibonacci heaps in O(1) time by concatenating the root lists
+    # the root of the new root list becomes equal to the first list and the second
+    # list is simply appended to the end (then the proper min node is determined)
+    def merge(self, h2):
+        H = FibonacciHeap()
+        H.root_list, H.min_node = self.root_list, self.min_node
+        # fix pointers when merging the two heaps
+        last = h2.root_list.left
+        h2.root_list.left = H.root_list.left
+        H.root_list.left.right = h2.root_list
+        H.root_list.left = last
+        H.root_list.left.right = H.root_list
+        # update min node if needed
+        if h2.min_node.key < H.min_node.key:
+            H.min_node = h2.min_node
+        # update total nodes
+        H.total_nodes = self.total_nodes + h2.total_nodes
+        return H
+
+    # if a child node becomes smaller than its parent node we
+    # cut this child node off and bring it up to the root list
+    def cut(self, x, y):
+        self.remove_from_child_list(y, x)
+        y.degree -= 1
+        self.merge_with_root_list(x)
+        x.parent = None
+        x.mark = False
+
+    # cascading cut of parent node to obtain good time bounds
+    def cascading_cut(self, y):
+        z = y.parent
+        if z is not None:
+            if y.mark is False:
+                y.mark = True
+            else:
+                self.cut(y, z)
+                self.cascading_cut(z)
+
+    # combine root nodes of equal degree to consolidate the heap
+    # by creating a list of unordered binomial trees
+    def consolidate(self):
+        A = [None] * int(math.log(self.total_nodes) * 2)
+        nodes = [w for w in self.iterate(self.root_list)]
+        for w in range(0, len(nodes)):
+            x = nodes[w]
+            d = x.degree
+            while A[d] != None:
+                y = A[d]
+                if x.key > y.key:
+                    temp = x
+                    x, y = y, temp
+                self.heap_link(y, x)
+                A[d] = None
+                d += 1
+            A[d] = x
+        # find new min node - no need to reconstruct new root list below
+        # because root list was iteratively changing as we were moving
+        # nodes around in the above loop
+        for i in range(0, len(A)):
+            if A[i] is not None:
+                if A[i].key < self.min_node.key:
+                    self.min_node = A[i]
+
+    # actual linking of one node to another in the root list
+    # while also updating the child linked list
+    def heap_link(self, y, x):
+        self.remove_from_root_list(y)
+        y.left = y.right = y
+        self.merge_with_child_list(x, y)
+        x.degree += 1
+        y.parent = x
+        y.mark = False
+
+    # merge a node with the doubly linked root list
+    def merge_with_root_list(self, node):
+        if self.root_list is None:
+            self.root_list = node
+        else:
+            node.right = self.root_list.right
+            node.left = self.root_list
+            self.root_list.right.left = node
+            self.root_list.right = node
+
+    # merge a node with the doubly linked child list of a root node
+    def merge_with_child_list(self, parent, node):
+        if parent.child is None:
+            parent.child = node
+        else:
+            node.right = parent.child.right
+            node.left = parent.child
+            parent.child.right.left = node
+            parent.child.right = node
+
+    # remove a node from the doubly linked root list
+    def remove_from_root_list(self, node):
+        if node == self.root_list:
+            self.root_list = node.right
+        node.left.right = node.right
+        node.right.left = node.left
+
+    # remove a node from the doubly linked child list
+    def remove_from_child_list(self, parent, node):
+        if parent.child == parent.child.right:
+            parent.child = None
+        elif parent.child == node:
+            parent.child = node.right
+            node.right.parent = parent
+        node.left.right = node.right
+        node.right.left = node.left
+
+def generate_complete_graph(n):
+    edges = []
+    for i in range(1, n+1):
+        for j in range(i+1, n+1):
+            weight = random.randint(1, 10)
+            edges.append((i, j, weight))
+    return edges
+
+def generate_connected_sparse_graph(n, m):
+    if m < n-1:
+        raise ValueError("Minimum number of edges to connect all nodes is n-1")
+
+    edges = set()
+    # 최소 스패닝 트리를 형성하여 모든 노드가 연결되도록 초기 설정
+    for i in range(1, n):
+        weight = random.randint(1, 10)
+        edges.add((i, i+1, weight))
+    
+    # 나머지 에지를 추가
+    while len(edges) < m:
+        a, b = random.randint(1, n), random.randint(1, n)
+        if a != b:
+            edges.add((a, b, random.randint(1, 10)))
+
+    return list(edges)
+
+def prim(n, edges):
+    graph = [[] for _ in range(n+1)]
+    for a, b, w in edges:
+        graph[a].append((w, b))
+        graph[b].append((w, a))
+    
+    visited = [False] * (n+1)
+    heap = [(0, 1)]
+    mst_weight = 0
+    
+    while heap:
+        w, v = heappop(heap)
+        if not visited[v]:
+            visited[v] = True
+            mst_weight += w
+            for nw, nv in graph[v]:
+                if not visited[nv]:
+                    heappush(heap, (nw, nv))
+    
+    return mst_weight
+
+def prim_early_stop(n, edges):
+    graph = [[] for _ in range(n+1)]
+    for a, b, w in edges:
+        graph[a].append((w, b))
+        graph[b].append((w, a))
+    
+    visited = [False] * (n+1)
+    heap = [(0, 1)]
+    mst_weight = 0
+    edge_count = 0
+    
+    while heap and edge_count < n - 1:
+        w, v = heappop(heap)
+        if not visited[v]:
+            visited[v] = True
+            mst_weight += w
+            edge_count += 1
+            for nw, nv in graph[v]:
+                if not visited[nv]:
+                    heappush(heap, (nw, nv))
+    
+    return mst_weight
+
+def kruskal(n, edges):
+    def find(parent, x):
+        if parent[x] != x:
+            parent[x] = find(parent, parent[x])
+        return parent[x]
+
+    def union(parent, a, b):
+        a = find(parent, a)
+        b = find(parent, b)
+        if a < b:
+            parent[b] = a
+        else:
+            parent[a] = b
+
+    edges.sort(key=lambda x: x[2])
+    parent = list(range(n+1))
+    mst_weight = 0
+    edge_count = 0
+    
+    for a, b, w in edges:
+        if find(parent, a) != find(parent, b):
+            union(parent, a, b)
+            mst_weight += w
+            edge_count += 1
+            if edge_count == n - 1:
+                break
+    
+    return mst_weight
+
+def prim_with_fib_heap(n, edges):
+    graph = [[] for _ in range(n+1)]
+    for a, b, w in edges:
+        graph[a].append((w, b))
+        graph[b].append((w, a))
+    
+    visited = [False] * (n+1)
+    fib_heap = FibonacciHeap()
+    heap_entries = {}
+    
+    # 시작 노드를 1로 지정하고, 힙에 첫 번째 노드를 삽입
+    heap_entries[1] = fib_heap.insert(0, 1)
+    mst_weight = 0
+    edge_count = 0
+    
+    while fib_heap.total_nodes > 0 and edge_count < n - 1:
+        entry = fib_heap.extract_min()
+        if entry is None:  # 추가된 검사
+            break
+        w, v = entry.key, entry.value
+        
+        if not visited[v]:
+            visited[v] = True
+            mst_weight += w
+            edge_count += 1
+            for nw, nv in graph[v]:
+                if not visited[nv]:
+                    if nv not in heap_entries:
+                        heap_entries[nv] = fib_heap.insert(nw, nv)
+                    elif nw < heap_entries[nv].key:
+                        fib_heap.decrease_key(heap_entries[nv], nw)
+    
+    if edge_count == n - 1:
+        return mst_weight
+
+def run_test_reduced(graph_type, sizes, iterations):
+    results = []
+    for n in sizes:
+        kruskal_times, prim_early_stop_times = [], []
+        for _ in range(iterations):
+            if graph_type == "complete":
+                graph = generate_complete_graph(n)
+            else:
+                graph = generate_connected_sparse_graph(n, n*2)
+
+            start = time.time()
+            prim_early_stop(n, graph)
+            prim_early_stop_times.append(time.time() - start)
+            
+            start = time.time()
+            kruskal(n, graph)
+            kruskal_times.append(time.time() - start)
+
+        results.append({
+            'n': n,
+            'prim_early_avg_time': sum(prim_early_stop_times) / iterations,
+            'kruskal_avg_time': sum(kruskal_times) / iterations
+        })
+    
+    return results
+
+
+
+
+
+#  실행 및 결과 출력 함수
+reduced_sizes = [100, 500, 1000, 5000]
+complete_graph_results_reduced = run_test_reduced("complete", reduced_sizes, 1)
+sparse_graph_results_reduced = run_test_reduced("sparse", reduced_sizes, 1)
+
+def print_results(results, graph_type):
+    print(f"{graph_type} 그래프 결과")
+    print(f"{'노드 수':>5} | {'Prim 평균 시간':>20} | {'Kruskal 평균 시간':>15}")
+    for result in results:
+        print(f"{result['n']:>5} | {result['prim_early_avg_time']:20.5f} | {result['kruskal_avg_time']:15.5f}")
+
+print_results(complete_graph_results_reduced, "완전")
+print_results(sparse_graph_results_reduced, "희소")
