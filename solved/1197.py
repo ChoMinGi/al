@@ -2,31 +2,35 @@ import sys
 from collections import defaultdict
 import heapq
 
-
-
 input = sys.stdin.readline
 
 V,E = map(int,input().split())
-graph = []
-for _ in range(E):
-    graph.append(list(map(int,input().split())))
-graph.sort(key= lambda x: x[2],reverse=True)
 
-parent = [i for i in range(V+1)]
-res = []
+def kruskal():
+    graph = []
+    for _ in range(E):
+        graph.append(list(map(int,input().split())))
+    graph.sort(key= lambda x: x[2],reverse=True)
 
-while(graph):
-    if len(res) == V:
-        break
-    a,b,c = graph.pop()
+    parent = [i for i in range(V+1)]
+    res = []
 
+    def find(parent, x):
+        if parent[x] != x:
+            parent[x] = find(parent, parent[x])
+        return parent[x]
 
-    for i in range(1,V+1):
-        if parent[i] == parent[b]:
-            parent[i] = parent[a]
-    res.append(c)
+    while(graph):
+        if len(res) == V:
+            break
+        a,b,c = graph.pop()
+        a_root = find(parent,a)
+        b_root = find(parent,b)
+        if a_root != b_root:
+            parent[a_root] = b_root
+            res.append(c)
 
-print(sum(res))
+    print(sum(res))
 
 
 def krim():
