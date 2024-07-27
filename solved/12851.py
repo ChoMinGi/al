@@ -1,21 +1,22 @@
-n = int(input())
+import sys
+from collections import deque
+N, K= map(int, sys.stdin.readline().split())
+queue = deque()
+queue.append(N)
+way = [0]*100001
+cnt, result = 0,0
+while (queue):
+    a = queue.popleft()
+    temp = way[a]
+    if a == K:
+        result = temp
+        cnt+=1
+        continue
 
-dp = [[[],[]] for _ in range(n+1)]
+    for i in [a-1, a+1, a*2]:
+        if 0 <= i < 100001 and (way[i] == 0 or way[i] >= way[a]+1):
+            way[i] = way[a]+1
+            queue.append(i)
 
-dp[1][0] = 0
-dp[1][1] = [1]
-
-for i in range(2,n+1):
-    dp[i][0] = dp[i-1][0]+1
-    dp[i][1] = [i]+dp[i-1][1]
-
-    if not i%2 and dp[i][0]>dp[i//2][0]+1:
-        dp[i][0] = dp[i//2][0]+1
-        dp[i][1] = [i]+dp[i//2][1]
-    
-    if not i%3 and dp[i][0]>dp[i//3][0]+1:
-        dp[i][0] = dp[i//3][0]+1
-        dp[i][1] = [i]+dp[i//3][1]
-
-print(dp[n][0])
-print(*dp[n][1])
+print(result)
+print(cnt)
